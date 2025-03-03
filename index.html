@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Audio Visualizer</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: black;
+      overflow: hidden;
+    }
+    input[type="file"] {
+      color: white;
+      position: absolute;
+      top: 20px;
+      left: calc(50% - 105px);
+      z-index: 10;
+    }
+    #controls {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.1);
+      padding: 10px 20px;
+      border-radius: 8px;
+      z-index: 10;
+      backdrop-filter: blur(5px);
+    }
+    button {
+      background: rgba(255, 255, 255, 0.9);
+      border: none;
+      padding: 8px 20px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    input[type="range"] {
+      width: 200px;
+    }
+    canvas {
+      transition: background 0.5s ease;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/addons/p5.sound.min.js"></script>
+</head>
+<body>
+  <script>
+    let song;
+    let fft;
+    let particles = [];
+    let fileInput, playPauseBtn, progressSlider;
+    let currentGradient = [];
+    let targetGradient = [];
+    let colorPalettes = [
+      // Midnight series
+      [[14, 22, 39], [23, 42, 58], [34, 61, 84]],    // Deep blues
+      // Obsidian series
+      [[16, 20, 31], [35, 37, 46], [54, 57, 63]],    // Dark grays
+      // Burgundy night
+      [[40, 10, 18], [70, 15, 25], [100, 30, 40]],    // Dark reds
+      // Abyssal depths
+      [[9, 27, 37], [12, 44, 56], [18, 68, 82]],     // Deep teals
+      // Twilight zone
+      [[25, 15, 40], [45, 25, 65], [70, 40, 90]],     // Dark purples
+      // Forest night
+      [[15, 30, 20], [25, 45, 30], [35, 60, 45]],     // Dark greens
+      // Eclipse series
+      [[10, 10, 15], [25, 25, 35], [40, 40, 55]],     // Cool grays
+      // Volcanic dark
+      [[30, 15, 10], [55, 25, 15], [80, 40, 25]],     // Dark oranges
+      // Mystic fog
+      [[20, 25, 35], [35, 40, 50], [50, 55, 65]],     // Blue grays
+      // Deep space
+      [[12, 15, 30], [22, 25, 45], [35, 40, 65]]     // Cosmic blues
+    ];
+    let gradientAngle = 0;
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      angleMode(DEGREES);
+      fft = new p5.FFT();
+      
+      fileInput = createFileInput(handleFile);
+      fileInput.position(windowWidth / 2 - 105, 20);
+      fileInput.attribute('accept', 'audio/*');
+      fileInput.style('color', 'white');
+
+      let controls = createDiv();
+      controls.id('controls');
+
+      playPauseBtn = createButton('Play');
+      playPauseBtn.parent(controls);
+      playPauseBtn.mouseClicked(togglePlayPause);
+
+      progressSlider = createSlider(0, 1, 0);
+      progressSlider.parent(controls);
+      progressSlider.input(handleSeek);
+
+      currentGradient = colorPalettes[0];
+      targetGradient = colorPalettes[1];
+    }
+
+    function handleFile(file) {
+      if (file.type === 'audio') {
+        if (song) song.stop();
+        song = loadSound(file.data, () => {
+          progressSlider.attribute('max', song.duration());
+          playPauseBtn.html('Play');
+        });
+      }
+    }
+
+    function togglePlayPause() {
+      if (!song) return;
+      song.isPlaying() ? (song.pause(), playPauseBtn.html('Play')) : (song.play(), playPauseBtn.html('Pause'));
+    }
+
+    function handleSeek() {
+      if (song) song.jump(progressSlider.value());
+    }
+
+    function drawGradientBackground(amp) {
+      currentGradient.forEach((color, i) => {
+        color[0] = lerp(color[0], targetGradient[i][0], 0.02);
+        color[1] = lerp(color[1], targetGradient[i][1], 0.02);
+        color[2] = lerp(color[2], targetGradient[i][2], 0.02);
+      });
+
+      gradientAngle += map(amp, 0, 255, 0.2, 2);
+      let angle = radians(gradientAngle);
+      let x1 = width/2 + cos(angle) * width;
+      let y1 = height/2 + sin(angle) * height;
+      let x2 = width/2 - cos(angle) * width;
+      let y2 = height/2 - sin(angle) * height;
+
+      let gradient = drawingContext.createLinearGradient(x1, y1, x2, y2);
+      gradient.addColorStop(0, `rgb(${currentGradient[0]})`);
+      gradient.addColorStop(0.5, `rgb(${currentGradient[1]})`);
+      gradient.addColorStop(1, `rgb(${currentGradient[2]})`);
+
+      drawingContext.fillStyle = gradient;
+      drawingContext.fillRect(0, 0, width, height);
+    }
+
+    function draw() {
+      push();
+      resetMatrix();
+      if (song && song.isPlaying()) {
+        let amp = fft.getEnergy(20, 200);
+        drawGradientBackground(amp);
+        if (amp > 220) targetGradient = random(colorPalettes);
+      } else {
+        background(0);
+      }
+      pop();
+
+      translate(width/2, height/2);
+      stroke("rgba(255, 50, 50, 0.8)");
+      strokeWeight(4);
+      noFill();
+
+      if (song && song.isPlaying()) {
+        fft.analyze();
+        let wave = fft.waveform();
+        let amp = fft.getEnergy(20, 200);
+
+        for (let t = -1; t <= 1; t += 2) {
+          beginShape();
+          for (let i = -3; i <= 183; i += 3) {
+            let clampedI = constrain(i, 0, 180);
+            let index = floor(map(clampedI, 0, 180, 0, wave.length - 1));
+            let avg = (
+              wave[index] +
+              wave[min(index + 1, wave.length - 1)] +
+              wave[min(index + 1, wave.length - 1)] +
+              wave[min(index + 2, wave.length - 1)] +
+              wave[max(index - 1, 0)] +
+              wave[max(index - 1, 0)] +
+              wave[max(index - 2, 0)]
+            ) / 7;
+            
+            let r = map(avg, -1, 1, 200, 350);
+            let x = r * sin(clampedI) * t;
+            let y = r * cos(clampedI);
+            curveVertex(x, y);
+          }
+          endShape();
+        }
+
+        particles.push(new Particle());
+        for (let i = particles.length - 1; i >= 0; i--) {
+          particles[i].update(amp > 230);
+          particles[i].show();
+          if (particles[i].edges()) particles.splice(i, 1);
+        }
+      } else {
+        fill(255);
+        noStroke();
+        textAlign(CENTER, CENTER);
+        text('Upload audio file using the button above', 0, 0);
+      }
+
+      if (song) progressSlider.value(song.currentTime());
+    }
+
+    class Particle {
+      constructor() {
+        this.pos = p5.Vector.random2D().mult(250);
+        this.vel = createVector(0, 0);
+        this.acc = this.pos.copy().mult(random(0.0001, 0.00001));
+        this.w = random(3, 5);
+        this.color = [random(200,255), random(200,255), random(200,255)];
+      }
+      
+      update(cond) {
+        this.vel.add(this.acc);
+        this.pos.add(this.vel);
+        if (cond) this.vel.add(this.acc.mult(1.03));
+      }
+      
+      edges() {
+        return this.pos.x < -width/2 || this.pos.x > width/2 || 
+               this.pos.y < -height/2 || this.pos.y > height/2;
+      }
+      
+      show() {
+        noStroke();
+        fill(this.color);
+        ellipse(this.pos.x, this.pos.y, this.w);
+      }
+    }
+
+    function lerp(start, end, amt) {
+      return (1 - amt) * start + amt * end;
+    }
+
+    function random(arr) {
+      return arr[Math.floor(Math.random() * arr.length)];
+    }
+  </script>
+</body>
+</html>
