@@ -59,9 +59,7 @@
     let targetGradient = [];
     let colorPalettes = [
       // Enhanced Midnight series
-      [[20, 30, 50], [35, 50, 75], [50, 70, 100]],    // Vivid blues
-      // Cosmic Obsidian
-      [[25, 25, 35], [45, 45, 55], [65, 65, 80]],     // Modern grays
+      [[20, 30, 50], [35, 50, 75], [50, 70, 100]],    // Vivid blue
       // Crimson Night
       [[50, 15, 25], [80, 25, 35], [110, 40, 50]],    // Rich reds
       // Abyssal Glow
@@ -69,9 +67,7 @@
       // Twilight Pulse
       [[35, 20, 50], [60, 35, 80], [85, 50, 110]],   // Electric purple
       // Forest Aurora
-      [[25, 40, 30], [45, 60, 45], [65, 80, 60]],    // Glowing greens
-      // Eclipse Shimmer
-      [[20, 20, 25], [40, 40, 50], [60, 60, 75]],    // Metallic grays
+      [[25, 40, 30], [45, 60, 45], [65, 80, 60]],    // Glowing green
       // Volcanic Flame
       [[40, 20, 15], [70, 35, 25], [100, 50, 35]],   // Intense oranges
       // Mystic Haze
@@ -170,7 +166,7 @@
       if (song && song.isPlaying()) {
         let amp = fft.getEnergy(20, 200);
         drawGradientBackground(amp);
-        if (amp > 220) targetGradient = random(colorPalettes);
+        if (amp > 240) targetGradient = random(colorPalettes);
       } else {
         background(0);
       }
@@ -210,6 +206,8 @@
         }
 
         particles.push(new Particle());
+        let angle = frameCount * 0.5;
+        rotate(angle);
         for (let i = particles.length - 1; i >= 0; i--) {
           particles[i].update(amp > 230);
           particles[i].show();
@@ -241,8 +239,8 @@
       }
       
       edges() {
-        return this.pos.x < -width/2 || this.pos.x > width/2 || 
-               this.pos.y < -height/2 || this.pos.y > height/2;
+        return this.pos.x < -width/1.1 || this.pos.x > width/1.1 || 
+               this.pos.y < -height/1.1 || this.pos.y > height/1.1;
       }
       
       show() {
