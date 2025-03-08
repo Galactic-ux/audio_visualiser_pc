@@ -10,54 +10,155 @@
       padding: 0;
       background: black;
       overflow: hidden;
+      font-family: 'Arial', sans-serif;
     }
-    input[type="file"] {
-      color: white;
-      position: absolute;
-      top: 20px;
-      left: calc(50% - 105px);
-      z-index: 10;
-    }
-    #controls {
+
+    #upload-container {
       position: fixed;
-      bottom: 20px;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      backdrop-filter: blur(10px);
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 30px;
+      padding: 8px 20px;
+      transition: background 0.3s;
+    }
+
+    #upload-container:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    #file-input {
+      display: none;
+    }
+
+    .custom-upload-btn {
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      padding: 8px 20px;
+    }
+
+    #controls {
+      height: 25px;
+      width: 300px;
+      position: fixed;
+      bottom: 10px;
       left: 50%;
       transform: translateX(-50%);
       display: flex;
-      gap: 10px;
+      gap: 15px;
       align-items: center;
       background: rgba(255, 255, 255, 0.1);
-      padding: 10px 20px;
-      border-radius: 8px;
-      z-index: 10;
-      backdrop-filter: blur(5px);
+      padding: 15px 30px;
+      border-radius: 30px;
+      z-index: 100;
+      backdrop-filter: blur(10px);
     }
-    button {
-      background: rgba(255, 255, 255, 0.9);
+
+    .control-btn {
+      height: 30px;
+      width: 35px;
+      background: none;
       border: none;
-      padding: 8px 20px;
+      color: white;
+      font-size: 24px;
       cursor: pointer;
-      border-radius: 4px;
+      padding-bottom: 35px;
+      border-radius: 30%;
+      transition: all 0.3s;
     }
+
+    .control-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    #time-display {
+      color: white;
+      font-size: 14px;
+      min-width: 100px;
+      text-align: center;
+    }
+
     input[type="range"] {
       width: 200px;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 2px;
     }
-    canvas {
-      transition: background 0.5s ease;
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 12px;
+      height: 12px;
+      background: white;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+
+    #song-info {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      color: white;
+      z-index: 100;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 10px 20px;
+      border-radius: 15px;
+      max-width: 300px;
+      backdrop-filter: blur(10px);
+    }
+
+    .album-art {
+      width: 300px;
+      height: 300px;
+      border-radius: 50%;
+      object-fit: cover;
+      margin-bottom: 15px;
+      border: 3px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 1;
     }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/addons/p5.sound.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
 </head>
 <body>
+  <div id="upload-container">
+    <input type="file" id="file-input" accept="audio/*">
+    <label for="file-input" class="custom-upload-btn">
+      <span>Upload Music Here</span>
+    </label>
+  </div>
+
+  <img class="album-art" id="album-art" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=">
+
+  <div id="song-info">
+    <div id="song-title"></div>
+    <div id="song-artist"></div>
+  </div>
+
   <script>
-    let song;
-    let fft;
+    let song, fft;
     let particles = [];
-    let fileInput, playPauseBtn, progressSlider;
+    let albumArt;
     let currentGradient = [];
     let targetGradient = [];
-    let colorPalettes = [
+    let gradientAngle = 0;
+    let artSize = 50;
+    let peakEnergy = 0;
+
+    const colorPalettes = [
       // Enhanced Midnight series
       [[20, 30, 50], [35, 50, 75], [50, 70, 100]],    // Vivid blue
       // Crimson Night
@@ -91,65 +192,101 @@
       // Sunset Horizon
       [[50, 30, 40], [75, 50, 60], [100, 70, 80]]    // Pinkish hues
     ];
-    let gradientAngle = 0;
 
     function setup() {
       createCanvas(windowWidth, windowHeight);
       angleMode(DEGREES);
-      fft = new p5.FFT();
-      
-      fileInput = createFileInput(handleFile);
-      fileInput.position(windowWidth / 2 - 105, 20);
-      fileInput.attribute('accept', 'audio/*');
-      fileInput.style('color', 'white');
-
-      let controls = createDiv();
-      controls.id('controls');
-
-      playPauseBtn = createButton('Play');
-      playPauseBtn.parent(controls);
-      playPauseBtn.mouseClicked(togglePlayPause);
-
-      progressSlider = createSlider(0, 1, 0);
-      progressSlider.parent(controls);
-      progressSlider.input(handleSeek);
-
+      fft = new p5.FFT(0.8, 512);
       currentGradient = colorPalettes[0];
       targetGradient = colorPalettes[1];
+      
+      document.getElementById('file-input').addEventListener('change', function(e) {
+        handleFile(e.target.files[0]);
+      });
+
+      createControls();
     }
 
-    function handleFile(file) {
-      if (file.type === 'audio') {
-        if (song) song.stop();
-        song = loadSound(file.data, () => {
-          progressSlider.attribute('max', song.duration());
-          playPauseBtn.html('Play');
-        });
+    function createControls() {
+      const controls = createDiv();
+      controls.id('controls');
+
+      const playBtn = createButton('▶');
+      playBtn.class('control-btn');
+      playBtn.mouseClicked(togglePlay);
+      playBtn.parent(controls);
+
+      const progress = createSlider(0, 1, 0, 0.01);
+      progress.input(() => song.jump(progress.value()));
+      progress.parent(controls);
+
+      const timeDisplay = createDiv('0:00 / 0:00');
+      timeDisplay.id('time-display');
+      timeDisplay.parent(controls);
+    }
+
+    async function handleFile(file) {
+      if (song) song.stop();
+      song = loadSound(URL.createObjectURL(file), () => {
+        song.connect(fft);
+        document.querySelector('input[type="range"]').max = song.duration();
+      });
+
+      new jsmediatags.Reader(file).read({
+        onSuccess: tag => {
+          const { title = 'Unknown', artist = 'Unknown', picture } = tag.tags;
+          document.getElementById('song-title').textContent = title;
+          document.getElementById('song-artist').textContent = artist;
+
+          const albumArt = document.getElementById('album-art');
+          if (picture) {
+            const base64 = arrayBufferToBase64(picture.data);
+            albumArt.style.display = 'block';
+            albumArt.src = `data:${picture.format};base64,${base64}`;
+          } else {
+            albumArt.style.display = 'none';
+          }
+        },
+        onError: error => console.error(error)
+      });
+    }
+
+    function draw() {
+      background(0, 50);
+      translate(width/2, height/2);
+      
+      if (song && song.isPlaying()) {
+        updateVisuals();
+        drawBackground();
+        drawWaveform();
+        updateParticles();
+        updateProgress();
+      } else {
+        background(0);
       }
     }
 
-    function togglePlayPause() {
-      if (!song) return;
-      song.isPlaying() ? (song.pause(), playPauseBtn.html('Play')) : (song.play(), playPauseBtn.html('Pause'));
-    }
+    function drawBackground() {
+      const energy = fft.getEnergy(20, 200);
+      peakEnergy = max(energy, peakEnergy * 0.98);
 
-    function handleSeek() {
-      if (song) song.jump(progressSlider.value());
-    }
+      // Update gradient colors
+      currentGradient = currentGradient.map((col, i) => 
+        col.map((c, j) => lerp(c, targetGradient[i][j], 0.02)
+      ));
 
-    function drawGradientBackground(amp) {
-      currentGradient.forEach((color, i) => {
-        color[0] = lerp(color[0], targetGradient[i][0], 0.02);
-        color[1] = lerp(color[1], targetGradient[i][1], 0.02);
-        color[2] = lerp(color[2], targetGradient[i][2], 0.02);
-      });
-
-      gradientAngle += map(amp, 0, 255, 0.2, 2);
+      // Create full-screen rotating gradient
+      gradientAngle += map(peakEnergy, 0, 255, 0.2, 2);
       let angle = radians(gradientAngle);
-      let x1 = width/2 + cos(angle) * width;
-      let y1 = height/2 + sin(angle) * height;
-      let x2 = width/2 - cos(angle) * width;
-      let y2 = height/2 - sin(angle) * height;
+      
+      push();
+      translate(-width/2, -height/2);
+      
+      // Calculate gradient points to cover entire screen
+      let x1 = cos(angle) * width;
+      let y1 = sin(angle) * height;
+      let x2 = width - cos(angle) * width;
+      let y2 = height - sin(angle) * height;
 
       let gradient = drawingContext.createLinearGradient(x1, y1, x2, y2);
       gradient.addColorStop(0, `rgb(${currentGradient[0]})`);
@@ -158,43 +295,42 @@
 
       drawingContext.fillStyle = gradient;
       drawingContext.fillRect(0, 0, width, height);
+      pop();
     }
 
-    function draw() {
-      push();
-      resetMatrix();
-      if (song && song.isPlaying()) {
-        let amp = fft.getEnergy(20, 200);
-        drawGradientBackground(amp);
-        if (amp > 240) targetGradient = random(colorPalettes);
-      } else {
-        background(0);
+    function updateVisuals() {
+      fft.analyze();
+      const energy = fft.getEnergy(20, 200);
+      peakEnergy = max(energy, peakEnergy * 0.98);
+      
+      // Smooth palette transition
+      if (energy > 240) {
+        targetGradient = random(colorPalettes.filter(p => p !== targetGradient));
       }
-      pop();
+      currentGradient = currentGradient.map((col, i) => col.map((c, j) => 
+        lerp(c, targetGradient[i][j], 0.02)));
+    }
 
-      translate(width/2, height/2);
-      stroke("rgba(255, 50, 50, 0.8)");
-      strokeWeight(4);
+    function drawWaveform() {
+      const waveform = fft.waveform();
+      
       noFill();
-
-      if (song && song.isPlaying()) {
-        fft.analyze();
-        let wave = fft.waveform();
-        let amp = fft.getEnergy(20, 200);
-
-        for (let t = -1; t <= 1; t += 2) {
+      stroke("red");
+      strokeWeight(3);
+      
+      for (let t = -1; t <= 1; t += 2) {
           beginShape();
           for (let i = -3; i <= 183; i += 3) {
             let clampedI = constrain(i, 0, 180);
-            let index = floor(map(clampedI, 0, 180, 0, wave.length - 1));
+            let index = floor(map(clampedI, 0, 180, 0, waveform.length - 1));
             let avg = (
-              wave[index] +
-              wave[min(index + 1, wave.length - 1)] +
-              wave[min(index + 1, wave.length - 1)] +
-              wave[min(index + 2, wave.length - 1)] +
-              wave[max(index - 1, 0)] +
-              wave[max(index - 1, 0)] +
-              wave[max(index - 2, 0)]
+              waveform[index] +
+              waveform[min(index + 1, waveform.length - 1)] +
+              waveform[min(index + 1, waveform.length - 1)] +
+              waveform[min(index + 2, waveform.length - 1)] +
+              waveform[max(index - 1, 0)] +
+              waveform[max(index - 1, 0)] +
+              waveform[max(index - 2, 0)]
             ) / 7;
             
             let r = map(avg, -1, 1, 200, 350);
@@ -204,23 +340,46 @@
           }
           endShape();
         }
+    }
 
-        particles.push(new Particle());
-        let angle = frameCount * 0.5;
-        rotate(angle);
-        for (let i = particles.length - 1; i >= 0; i--) {
-          particles[i].update(amp > 230);
-          particles[i].show();
-          if (particles[i].edges()) particles.splice(i, 1);
-        }
-      } else {
-        fill(255);
-        noStroke();
-        textAlign(CENTER, CENTER);
-        text('Upload audio file using the button above', 0, 0);
-      }
+    function updateParticles() {
+      particles.push(new Particle());
 
-      if (song) progressSlider.value(song.currentTime());
+      let angle = frameCount * 0.5;
+      rotate(angle);
+      
+      particles.forEach((p, i) => {
+        p.update(peakEnergy);
+        p.display();
+        if (p.isOffscreen()) particles.splice(i, 1);
+      });
+    }
+
+    function getCurrentColor(index) {
+      return currentGradient[index % currentGradient.length];
+    }
+
+    function updateProgress() {
+      const progress = document.querySelector('input[type="range"]');
+      progress.value = song.currentTime();
+      document.getElementById('time-display').textContent = 
+        `${formatTime(song.currentTime())} / ${formatTime(song.duration())}`;
+    }
+
+    function togglePlay() {
+      if (!song) return;
+      song.isPlaying() ? song.pause() : song.play();
+      document.querySelector('.control-btn').textContent = 
+        song.isPlaying() ? '⏸' : '▶';
+    }
+
+    function formatTime(sec) {
+      return `${floor(sec/60)}:${floor(sec%60).toString().padStart(2, '0')}`;
+    }
+
+    function arrayBufferToBase64(buffer) {
+      return btoa(new Uint8Array(buffer).reduce(
+        (data, byte) => data + String.fromCharCode(byte), ''));
     }
 
     class Particle {
@@ -231,31 +390,23 @@
         this.w = random(3, 5);
         this.color = [random(200,255), random(200,255), random(200,255)];
       }
-      
-      update(cond) {
+
+      update(energy) {
         this.vel.add(this.acc);
         this.pos.add(this.vel);
-        if (cond) this.vel.add(this.acc.mult(1.03));
+        if (energy) this.vel.add(this.acc.mult(1.03));
+        this.life -= 2;
       }
-      
-      edges() {
-        return this.pos.x < -width/1.1 || this.pos.x > width/1.1 || 
-               this.pos.y < -height/1.1 || this.pos.y > height/1.1;
-      }
-      
-      show() {
+
+      display() {
         noStroke();
-        fill(this.color);
-        ellipse(this.pos.x, this.pos.y, this.w);
+        fill(...this.color, this.life);
+        ellipse(this.pos.x, this.pos.y, 5);
       }
-    }
 
-    function lerp(start, end, amt) {
-      return (1 - amt) * start + amt * end;
-    }
-
-    function random(arr) {
-      return arr[Math.floor(Math.random() * arr.length)];
+      isOffscreen() {
+        return this.pos.mag() > width/2 || this.life < 0;
+      }
     }
   </script>
 </body>
