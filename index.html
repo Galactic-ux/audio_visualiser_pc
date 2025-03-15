@@ -129,6 +129,43 @@
       z-index: 1;
       transition: transform 0.2s ease-out;
     }
+
+    #visualizer-controls {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 100;
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 30px;
+    padding: 12px 20px;
+    transition: background 0.3s;
+    display: flex;
+    gap: 15px;
+  }
+
+  #visualizer-controls:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  .visualizer-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: white;
+    cursor: pointer;
+  }
+
+  .visualizer-option input[type="radio"] {
+    accent-color: #fff;
+    margin: 0;
+    cursor: pointer;
+  }
+
+  .visualizer-option label {
+    cursor: pointer;
+    font-size: 14px;
+  }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/addons/p5.sound.min.js"></script>
@@ -149,6 +186,18 @@
     <div id="song-artist"></div>
   </div>
 
+  <div id="visualizer-controls">
+    <div class="visualizer-option">
+      <input type="radio" id="wave-mode" name="visualizer" checked>
+      <label for="wave-mode">Wave</label>
+    </div>
+    <div class="visualizer-option">
+      <input type="radio" id="bubbles-mode" name="visualizer">
+      <label for="bubbles-mode">Bubbles</label>
+    </div>
+  </div>
+
+
   <script>
     let song, fft;
     let particles = [];
@@ -158,6 +207,19 @@
     let gradientAngle = 0;
     let artSize = 50;
     let peakEnergy = 0;
+
+    //Circles Visualizer
+    var fftLin;
+    var spectrumScale = 1;
+    var linNum = 80;
+    var r = 0;
+    var x = [];
+    var y = [];
+    var rotationSpeeds = [];
+
+    //Line Visualizer
+    //const MAX_LINES = 40;
+    //let orbitingLines = [];
 
     let currentScale = 1;
     let targetScale = 1;
@@ -230,6 +292,8 @@
       [[60, 25, 45], [90, 40, 65], [120, 55, 85]]     // Hot pink
     ];
 
+    let visualizerMode = 'waveform'; // Default visualizer mode
+
     function setup() {
       createCanvas(windowWidth, windowHeight);
       angleMode(DEGREES);
@@ -241,6 +305,27 @@
         handleFile(e.target.files[0]);
       });
 
+      document.getElementById('wave-mode').addEventListener('change', () => {
+        visualizerMode = 'waveform';
+      });
+  
+      document.getElementById('bubbles-mode').addEventListener('change', () => {
+        visualizerMode = 'circles';
+      });
+
+      //Circle Visualizer Logic
+      fftLin = fft.linAverages(linNum);
+      for (var i = 0; i< fftLin.length; i++){
+        if(i == 0) {
+          x[i] = 0;
+          y[i] = 0;
+        } else {
+          x[i] = random(-width, width);
+          y[i] = random(-height, height);
+        }
+        rotationSpeeds[i] = random(0.5,1);
+      }
+        
       createControls();
     }
 
@@ -295,13 +380,20 @@
       if (song && song.isPlaying()) {
         updateVisuals();
         drawBackground();
-        drawWaveform();
-        updateParticles();
+        //drawLines();
+        if (visualizerMode === 'waveform') {
+          drawWaveform();
+          updateParticles();
+        } else if (visualizerMode === 'circles') {
+          drawCircles();
+        }
+        
         updateProgress();
       } else {
         background(0);
       }
     }
+  
 
     function drawBackground() {
       const energy = fft.getEnergy(20, 200);
@@ -365,7 +457,7 @@
       
       noFill();
       stroke("red");
-      strokeWeight(3);
+      strokeWeight(5);
       
       for (let t = -1; t <= 1; t += 2) {
           beginShape();
@@ -390,6 +482,57 @@
           endShape();
         }
     }
+
+    function drawCircles() {
+      fft.analyze();
+      fftLin = fft.linAverages(linNum);
+      noStroke();
+      //fill(342, 23, 215);
+      for(var i = 0; i < fftLin.length; i++){
+        push();
+        rotate(r*rotationSpeeds[i]);
+        strokeWeight(3);
+        if(i % 2 == 1) {
+          stroke(255);
+        } else {
+          stroke(255);
+        }
+        if(i == 0) {
+          fill(0);
+          ellipse(x[i], y[i], fftLin[i]*spectrumScale*3, fftLin[i]*spectrumScale*3);
+        } else {
+          noFill();
+          ellipse(x[i], y[i], fftLin[i]*spectrumScale, fftLin[i]*spectrumScale);
+        }
+        pop();
+      }
+      r += 0.3;
+    }
+
+    /*function drawLines() {
+      fft.analyze();
+      const energy = fft.getEnergy(20, 200);
+      
+      // Add new lines periodically
+      if (orbitingLines.length < MAX_LINES) {
+        orbitingLines.push(new OrbitingLine());
+      }
+      // Update and display all lines
+      orbitingLines.forEach((line, index) => {
+        line.update(energy);
+        line.display();
+        
+        // Remove lines that have faded out
+        if (line.history.length <= 1) {
+          orbitingLines.splice(index, 1);
+        }
+      });
+      
+      // Gradually fade out oldest lines
+      if (orbitingLines.length > MAX_LINES) {
+        orbitingLines.shift();
+      }
+    }*/
 
     function updateParticles() {
       particles.push(new Particle());
@@ -457,6 +600,55 @@
         return this.pos.mag() > width/2 || this.life < 0;
       }
     }
+
+    /*class OrbitingLine {
+    constructor() {
+      this.angle = random(360);
+      this.radius = random(50, 150);
+      this.speed = random(-1.5, 1.5);
+      this.history = [];
+      this.maxHistory = 20;
+      this.color = this.getLineColor();
+    }
+
+    getLineColor() {
+      const baseColor = currentGradient[floor(random(currentGradient.length))];
+      return color(
+        min(baseColor[0] * 1.8, 0),
+        min(baseColor[1] * 1.8, 0),
+        min(baseColor[2] * 1.8, 0),
+        150
+      );
+    }
+
+    update(energy) {
+      // Update position
+      this.angle += this.speed + map(energy, 0, 255, -0.5, 0.5);
+      this.radius += map(energy, 0, 255, -0.5, 0.5);
+      
+      // Store current position in history
+      this.history.push({
+        x: cos(this.angle) * this.radius,
+        y: sin(this.angle) * this.radius
+      });
+      
+      // Remove oldest position if over limit
+      if (this.history.length > this.maxHistory) {
+        this.history.shift();
+      }
+    }
+
+    display() {
+      noFill();
+      beginShape();
+      for (let i = 0; i < this.history.length; i++) {
+        const alpha = map(i, 0, this.history.length, 50, 255);
+        stroke(red(this.color), green(this.color), blue(this.color), alpha);
+        curveVertex(this.history[i].x, this.history[i].y);
+      }
+      endShape();
+    }
+}*/
   </script>
 </body>
 </html>
