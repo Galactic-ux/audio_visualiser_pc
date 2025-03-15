@@ -418,8 +418,9 @@
         }
         rotationSpeeds[i] = random(0.5,1);
       }
-        
+
       createControls();
+      
     }
 
     function createControls() {
@@ -504,12 +505,15 @@
       song = loadSound(URL.createObjectURL(track.file), () => {
         if (!song.isPlaying()) song.play();
         document.querySelector('input[type="range"]').max = song.duration();
-
-        // Add event listener for when the song ends
-        song.onended(() => {
-            playNextTrack();
-        });
       });
+
+
+      song.onended(() => {
+            if (Math.abs(song.currentTime() - song.duration()) < 0.1) {
+                playNextTrack();
+            }
+        });
+      
 
       const albumArt = document.getElementById('album-art');
       if (track.picture) {
@@ -524,7 +528,7 @@
     function playNextTrack() {
     currentTrackIndex = (currentTrackIndex + 1) % playlist.length;
     loadTrack(playlist[currentTrackIndex]);
-    song.play();
+
     }
 
     function toggleDropdown() {
