@@ -101,17 +101,83 @@
       cursor: pointer;
     }
 
-    #song-info {
+    #playlist-container {
       position: fixed;
       top: 20px;
       left: 20px;
-      color: white;
       z-index: 100;
-      background: rgba(0, 0, 0, 0.6);
-      padding: 10px 20px;
-      border-radius: 15px;
-      max-width: 300px;
       backdrop-filter: blur(10px);
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 15px;
+      transition: background 0.3s;
+      max-width: 300px;
+      min-width: 200px;
+    }
+
+    #current-song {
+      display: flex;
+      align-items: center;
+      padding: 10px 15px;
+      color: white;
+      cursor: pointer;
+      position: relative;
+    }
+
+    #song-display {
+      flex-grow: 1;
+      overflow: hidden;
+      white-space: nowrap;
+      position: relative;
+      padding-right: 10px;
+    }
+
+    .marquee {
+      display: inline-block;
+      animation: marquee 10s linear infinite;
+    }
+
+    @keyframes marquee {
+      0% { transform: translateX(100%); }
+      100% { transform: translateX(-100%); }
+    }
+
+    #dropdown-button {
+      background: none;
+      border: none;
+      color: white;
+      font-size: 18px;
+      cursor: pointer;
+      padding: 0 5px;
+    }
+
+    #song-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: rgba(0, 0, 0, 0.8);
+      border-radius: 0 0 15px 15px;
+      max-height: 200px;
+      overflow-y: auto;
+      display: none;
+      backdrop-filter: blur(10px);
+    }
+
+    .song-option {
+      padding: 10px 15px;
+      color: white;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .song-option:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    #playlist-container:hover {
+      background: rgba(255, 255, 255, 0.2);
     }
 
     .album-art {
@@ -173,7 +239,7 @@
 </head>
 <body>
   <div id="upload-container">
-    <input type="file" id="file-input" accept="audio/*">
+    <input type="file" id="file-input" accept="audio/*" multiple>
     <label for="file-input" class="custom-upload-btn">
       <span>Upload Music Here</span>
     </label>
@@ -181,9 +247,14 @@
 
   <img class="album-art" id="album-art" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=">
 
-  <div id="song-info">
-    <div id="song-title"></div>
-    <div id="song-artist"></div>
+  <div id="playlist-container">
+    <div id="current-song" onclick="toggleDropdown()">
+      <div id="song-display">
+        <span id="song-title-display"></span>
+      </div>
+      <button id="dropdown-button">▼</button>
+    </div>
+    <div id="song-dropdown"></div>
   </div>
 
   <div id="visualizer-controls">
@@ -207,6 +278,13 @@
     let gradientAngle = 0;
     let artSize = 50;
     let peakEnergy = 0;
+
+    //Playlist
+    let playlist = [];
+    let currentTrackIndex = -1;
+    let dropdownOpen = false;
+
+
 
     //Circles Visualizer
     var fftLin;
@@ -301,9 +379,24 @@
       currentGradient = colorPalettes[0];
       targetGradient = colorPalettes[1];
       
-      document.getElementById('file-input').addEventListener('change', function(e) {
-        handleFile(e.target.files[0]);
-      });
+      document.addEventListener('click', (e) => {
+      if (!e.target.closest('#playlist-container')) {
+        dropdownOpen = false;
+        document.getElementById('song-dropdown').style.display = 'none';
+      }
+    });
+
+    // Update file input event listener
+    document.getElementById('file-input').addEventListener('change', function(e) {
+      handleFile(e.target.files);
+    });
+
+    // Add playlist selection handler
+    /*document.getElementById('song-select').addEventListener('change', function(e) {
+      currentTrackIndex = parseInt(e.target.value);
+      loadTrack(playlist[currentTrackIndex]);
+    });*/
+
 
       document.getElementById('wave-mode').addEventListener('change', () => {
         visualizerMode = 'waveform';
@@ -347,31 +440,106 @@
       timeDisplay.parent(controls);
     }
 
-    async function handleFile(file) {
-      if (song) song.stop();
-      song = loadSound(URL.createObjectURL(file), () => {
-        song.connect(fft);
-        document.querySelector('input[type="range"]').max = song.duration();
-      });
+    async function handleFile(files) {
+      const readerPromises = Array.from(files).map(file => 
+        new Promise(resolve => {
+          new jsmediatags.Reader(file).read({
+            onSuccess: tag => {
+              const track = {
+                file,
+                title: tag.tags.title || file.name.replace(/\.[^/.]+$/, ""),
+                artist: tag.tags.artist || 'Unknown Artist',
+                picture: tag.tags.picture
+              };
+              resolve(track);
+            },
+            onError: () => resolve({
+              file,
+              title: file.name.replace(/\.[^/.]+$/, ""),
+              artist: 'Unknown Artist',
+              picture: null
+            })
+          });
+        })
+      );
 
-      new jsmediatags.Reader(file).read({
-        onSuccess: tag => {
-          const { title = 'Unknown', artist = 'Unknown', picture } = tag.tags;
-          document.getElementById('song-title').textContent = title;
-          document.getElementById('song-artist').textContent = artist;
-
-          const albumArt = document.getElementById('album-art');
-          if (picture) {
-            const base64 = arrayBufferToBase64(picture.data);
-            albumArt.style.display = 'block';
-            albumArt.src = `data:${picture.format};base64,${base64}`;
-          } else {
-            albumArt.style.display = 'none';
-          }
-        },
-        onError: error => console.error(error)
-      });
+    const newTracks = await Promise.all(readerPromises);
+      playlist = [...playlist, ...newTracks];
+      updatePlaylistDropdown();
+      
+      if (currentTrackIndex === -1) {
+        currentTrackIndex = 0;
+        loadTrack(playlist[0]);
+      }
     }
+
+    //Playlist  
+    function updatePlaylistDropdown() {
+      const dropdown = document.getElementById('song-dropdown');
+      dropdown.innerHTML = playlist
+        .map((track, index) => `
+          <div class="song-option" data-index="${index}" onclick="selectTrack(${index})">
+            ${track.title} - ${track.artist}
+          </div>
+        `)
+        .join('');
+    }
+
+    function loadTrack(track) {
+      if (song) song.stop();
+      
+      // Update song display
+      const display = document.getElementById('song-title-display');
+      const container = document.getElementById('song-display');
+      const fullText = `${track.title} - ${track.artist}`;
+      
+      display.textContent = fullText;
+      display.classList.remove('marquee');
+      
+      // Check if text overflows
+      if (display.scrollWidth > container.offsetWidth) {
+        display.classList.add('marquee');
+      }
+
+      song = loadSound(URL.createObjectURL(track.file), () => {
+        if (!song.isPlaying()) song.play();
+        document.querySelector('input[type="range"]').max = song.duration();
+
+        // Add event listener for when the song ends
+        song.onended(() => {
+            playNextTrack();
+        });
+      });
+
+      const albumArt = document.getElementById('album-art');
+      if (track.picture) {
+        const base64 = arrayBufferToBase64(track.picture.data);
+        albumArt.style.display = 'block';
+        albumArt.src = `data:${track.picture.format};base64,${base64}`;
+      } else {
+        albumArt.style.display = 'none';
+      }
+    }
+
+    function playNextTrack() {
+    currentTrackIndex = (currentTrackIndex + 1) % playlist.length;
+    loadTrack(playlist[currentTrackIndex]);
+    song.play();
+    }
+
+    function toggleDropdown() {
+      dropdownOpen = !dropdownOpen;
+      document.getElementById('song-dropdown').style.display = 
+        dropdownOpen ? 'block' : 'none';
+    }
+
+    function selectTrack(index) {
+      currentTrackIndex = index;
+      loadTrack(playlist[index]);
+      song.play();
+      toggleDropdown();
+    }
+
 
     function draw() {
       background(0, 50);
@@ -401,7 +569,7 @@
 
       // Update gradient colors
       currentGradient = currentGradient.map((col, i) => 
-        col.map((c, j) => lerp(c, targetGradient[i][j], 0.02)
+        col.map((c, j) => lerp(c, targetGradient[i][j], 0.005)
       ));
 
       // Create full-screen rotating gradient
@@ -436,20 +604,18 @@
       targetScale = BASE_SCALE + (peakEnergy / 255) * PULSE_INTENSITY;
       
       // Smooth scale transition
-      currentScale = lerp(currentScale, targetScale, 0.1);
+      currentScale = lerp(currentScale, targetScale, 1);
       
       // Apply scaling to album art
       const albumArt = document.getElementById('album-art');
       albumArt.style.transform = `translate(-50%, -50%) scale(${currentScale})`;
 
-
-      
       // Smooth palette transition
-      if (energy > 240) {
+      if (energy > 250) {
         targetGradient = random(colorPalettes.filter(p => p !== targetGradient));
       }
       currentGradient = currentGradient.map((col, i) => col.map((c, j) => 
-        lerp(c, targetGradient[i][j], 0.02)));
+        lerp(c, targetGradient[i][j], 0.005)));
     }
 
     function drawWaveform() {
@@ -559,7 +725,7 @@
     }
 
     function togglePlay() {
-      if (!song) return;
+      if (!song || !playlist.length) return;
       song.isPlaying() ? song.pause() : song.play();
       document.querySelector('.control-btn').textContent = 
         song.isPlaying() ? '⏸' : '▶';
